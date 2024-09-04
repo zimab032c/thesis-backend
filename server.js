@@ -6,7 +6,6 @@ import dotenv from "dotenv";
 
 import fs from "fs"; // Import the filesystem module
 
-
 // Function to log conversation
 function logConversation(userId, role, message) {
   const logEntry = `${new Date().toISOString()} - ${userId} - ${role}: ${message}\n`;
@@ -51,13 +50,15 @@ const orders = [
 // Cache to store consistent responses
 const responseCache = {};
 
+const currentDate = new Date().toDateString(); // e.g., "Wed Aug 25 2023"
+
 // Generate the initial prompt
 const generateInitialPrompt = () => `
 You are a virtual assistant chatbot helping customers with their recent orders. Start by introducing yourself and explaining your capabilities. Here's how you should begin the interaction:
 
 1. **Introduction:**
-- Welcome! I’m your virtual assistant chatbot, here to help you with your recent orders. I can assist you with tracking orders, modifying or canceling them, and handling returns or exchanges. While I'm equipped to handle these tasks efficiently, please keep in mind that my expertise is focused on these areas. If you ask me about topics outside of these functions, I might struggle to provide accurate or useful responses. However, if necessary, I can escalate your issue to a human support specialist.
-- Follow up with: "You can communicate with me using the buttons or the input field below. Go ahead, try it."
+- Welcome! I’m your virtual assistant, here to help you with your recent orders. I can assist you with tracking orders, modifying or canceling them and handling returns. While I'm equipped to handle these tasks efficiently, please keep in mind that my expertise is focused on these areas. If you ask me about topics outside of these functions, I might struggle to provide accurate or useful responses. However, if necessary, I can escalate your issue to a human support specialist.
+- Follow up with: "You can communicate with me using the buttons or type out our requests in the input field below. Go ahead, try it."
 
 2. **Pause for User Confirmation:**
    - Wait for a response from the user like "OK" or "Understood" before continuing.
@@ -70,7 +71,14 @@ You are a virtual assistant chatbot helping customers with their recent orders. 
 1. **Track Operation:**
    - Provide the current status and relevant delivery information every time it is requested, even if the user has requested it before.
    - Indicate that the option has been selected before by marking it as "Previously Selected," but keep it fully functional.
-   - Ask sometthing like "What would you like to do next?" or a variation of it before listing options.
+   - For context: Today is 30.08.2024
+   - Always provide specific dates based on the current date, and avoid placeholders like "[Insert delivery date here]".
+   - Format dates in a conversational way, such as "August 27th, 2024" or "the 27th of August, 2024" instead of "27.08.2024".
+   - If an order is in transit, realistically estimate the delivery date a few days from todays date.
+   - If an order has been delivered, state the delivery date relative to the current date (e.g., "Delivered 3 days ago on [date]").
+   - If an order is in processing provide, also realistically estimate the delivery date to be longer than order that are already in transit. 
+   - Ask something like "What would you like to do next?" or a variation of it before listing options.
+   - Avoid phrases like "Great Choice!" and instead keep responses neutral and informative.
    - Options: "Options: Track (Previously Selected if applicable), Modify, Cancel, Return, Back to Order Selection".
 
 2. **Modify Operation:**
@@ -80,6 +88,7 @@ You are a virtual assistant chatbot helping customers with their recent orders. 
    - **Order C (Delivered):** Explain that modifications are not possible; display both options as disabled.
    - After a user interacts with "Modify," indicate that it has been selected before by marking it as "Previously Selected," but keep it fully functional.
    - Always allow modifying actions to be repeated and executed fully whenever requested.
+   - Avoid redundant process announcements like "I will now update..." as the visual pill messages already convey these actions.
    - Use: "Options: Modify Delivery Address, Add Gift Message (disabled if unavailable), Back to Order Operations, Back to Order Selection".
 
 3. **Cancel Operation:**
@@ -87,7 +96,7 @@ You are a virtual assistant chatbot helping customers with their recent orders. 
    - If in-transit or delivered, inform the user it cannot be canceled and why.
    - After a user interacts with "Cancel," indicate that it has been selected before by marking it as "Previously Selected," but keep it fully functional.
    - Ensure "Cancel" is always selectable; communicate if the operation is unavailable due to order status.
-   - Conclude with: "Would you like to do something else?" then "Options: Track, Modify, Cancel (Previously Selected if applicable), Return, Back to Order Selection".
+   - Conclude with: "Would you like to do something else?" or a variation, then "Options: Track, Modify, Cancel (Previously Selected if applicable), Return, Back to Order Selection".
 
 4. **Return Operation:**
    - For delivered orders, provide return instructions.
@@ -101,7 +110,18 @@ You are a virtual assistant chatbot helping customers with their recent orders. 
 - **Previously Selected:** Use this to indicate that an option has already been interacted with. Options that are marked as "Previously Selected" should still be fully available to the user and perform their respective actions. The status is purely a visual indicator that the user has recently interacted with this option. When users choose to interact with a "Previously Selected" option again, you should acknowledge the prior interaction and then fully execute the selected action as normal, without any limitations on repeated interactions.
 - **Disabled:** Use this to indicate that an option is unavailable due to order status. It should still be visible but not selectable.
 
+**Response Variations:**
+
+To keep the conversation engaging and natural, **randomly choose** one of the following phrases to conclude each response before listing the options:
+
+- "Would you like to do something else?"
+- "Is there anything else you'd like to do?"
+- "What would you like to do next?"
+- "How can I assist you further?"
+- "Would you like to explore another option?"
+
 Ensure that each response includes any necessary information or status updates before listing options. Start by asking which order they would like to manage with "Options: Order A, Order B, Order C".
+
 `;
 
 async function sendIntroductionMessage() {
@@ -170,8 +190,12 @@ app.post("/api/chat", async (req, res) => {
   if (userSession.waitingForConfirmation) {
     // After user confirms understanding, ask for customer number
     userSession.waitingForConfirmation = false;
-    const reply = "Thanks for confirming! Whenever you’re ready, please provide your customer number to proceed.";
-    
+    const reply =
+      "Thanks for confirming! Whenever you’re ready, please provide your customer number to proceed.";
+
+    // Store this message as the latest relevant bot message
+    userSession.lastBotMessage = reply;
+
     // Log bot response
     logConversation(userId, "assistant", reply);
 
@@ -181,48 +205,88 @@ app.post("/api/chat", async (req, res) => {
     });
   }
 
-// Handle customer number input
-if (!userSession.customerNumber) {
-  userSession.customerNumber = userMessage; // Assume any message is the customer number for simplicity
-  const reply = `Welcome, ${userSession.userName}! I'm ready to assist you with your orders. Which one would you like to manage?`;
-  
-  // Log the bot response
-  logConversation(userId, "assistant", reply);
+  // Handle customer number input
+  if (!userSession.customerNumber) {
+    if (/123-456/.test(userMessage)) {
+      userSession.customerNumber = userMessage; // Accept the correct customer number
+      const reply = `Welcome, ${userSession.userName}! I'm ready to assist you with your orders. Which one would you like to manage?`;
 
-  return res.json({
-    reply,
-    options: ["Order A", "Order B", "Order C"],
-    showProgressBar: true, // Show progress bar for this interaction
-  });
-}
+      // Log the bot response
+      logConversation(userId, "assistant", reply);
 
+      return res.json({
+        reply,
+        options: ["Order A", "Order B", "Order C"],
+        showProgressBar: true, // Show progress bar for this interaction
+      });
+    } else {
+      const reply = `It seems like the customer number you entered is incorrect. You can find your customer number in the confirmation E-Mail from your last purchase with us (Briefing Sheet).`;
 
-// Handle order selection and navigation
-if (!userSession.selectedOrder) {
-  const selectedOrder = orders.find((order) =>
-    userMessage.includes(order.id)
-  );
-  if (selectedOrder) {
-    userSession.selectedOrder = selectedOrder;
-    const reply = `Got it! You've selected **Order ${selectedOrder.id}**. How can I assist you with this order?`;
+      // Log the bot response
+      logConversation(userId, "assistant", reply);
 
-    // Log the bot response
-    logConversation(userId, "assistant", reply);
+      return res.json({
+        reply,
+        options: [],
+        showProgressBar: true, // No progress bar for this interaction
+      });
+    }
+  }
 
-    return res.json({
-      reply,
-      options: [
-        "Track",
-        "Modify",
-        "Cancel",
-        "Return",
-        "Back to Order Selection",
-      ],
-      showProgressBar: false,
+  // Handle order selection and navigation
+  if (!userSession.selectedOrder) {
+    const normalizedUserMessage = userMessage.toLowerCase().trim();
+
+    // Define regex patterns for each order
+    const orderPatterns = orders.map((order) => {
+      return {
+        id: order.id,
+        regex: new RegExp(
+          `\\b(order\\s*${order.id.toLowerCase()}|${order.id.toLowerCase()})\\b`,
+          "i"
+        ),
+      };
     });
-  } else {
-    const reply = "Please select an order to manage.";
-    
+
+    // Find the order that matches the user's input
+    const selectedOrder = orderPatterns.find((order) =>
+      order.regex.test(normalizedUserMessage)
+    );
+
+    if (selectedOrder) {
+      userSession.selectedOrder = selectedOrder;
+      const reply = `Got it! You've selected Order ${selectedOrder.id}. How can I assist you with this order?`;
+
+      // Log the bot response
+      logConversation(userId, "assistant", reply);
+
+      return res.json({
+        reply,
+        options: [
+          "Track",
+          "Modify",
+          "Cancel",
+          "Return",
+          "Back to Order Selection",
+        ],
+        showProgressBar: false,
+      });
+    } else {
+      const reply = "Please select an order to manage.";
+
+      // Log the bot response
+      logConversation(userId, "assistant", reply);
+
+      return res.json({
+        reply,
+        options: ["Order A", "Order B", "Order C"],
+        showProgressBar: false,
+      });
+    }
+  } else if (userMessage.includes("Back to Order Selection")) {
+    userSession.selectedOrder = null;
+    const reply = "Sure! Which order can I help you with?";
+
     // Log the bot response
     logConversation(userId, "assistant", reply);
 
@@ -232,20 +296,6 @@ if (!userSession.selectedOrder) {
       showProgressBar: false,
     });
   }
-} else if (userMessage.includes("Back to Order Selection")) {
-  userSession.selectedOrder = null;
-  const reply = "Sure! Which order can I help you with?";
-  
-  // Log the bot response
-  logConversation(userId, "assistant", reply);
-
-  return res.json({
-    reply,
-    options: ["Order A", "Order B", "Order C"],
-    showProgressBar: false,
-  });
-}
-
 
   // Handle "Track" operation
   const currentOrderId = userSession.selectedOrder.id;
