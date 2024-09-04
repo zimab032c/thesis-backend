@@ -5,16 +5,38 @@ import OpenAI from "openai";
 import dotenv from "dotenv";
 
 import fs from "fs"; // Import the filesystem module
+import { group } from "console";
 
 // Function to log conversation
-function logConversation(userId, role, message) {
-  const logEntry = `${new Date().toISOString()} - ${userId} - ${role}: ${message}\n`;
-  fs.appendFile("conversation_logs.txt", logEntry, (err) => {
+function logConversation(userId, role, message, group, sessionStart = false, sessionEnd = false) {
+  let logEntry = '';
+
+  // Add session start marker if it's the beginning of a new session
+  if (sessionStart) {
+    logEntry += `\n------------------------------\n`;
+    logEntry += `Session Start: ${userId} (Group: ${group}) - ${new Date().toISOString()}\n`;
+    logEntry += `------------------------------\n`;
+  }
+
+  // Add the regular log entry
+  logEntry += `${new Date().toISOString()} - ${userId} - ${group} - ${role}: ${message}\n`;
+
+  // Add session end marker if it's the end of the session
+  if (sessionEnd) {
+    logEntry += `\n------------------------------\n`;
+    logEntry += `Session End: ${userId} - ${new Date().toISOString()}\n`;
+    logEntry += `------------------------------\n`;
+  }
+
+  // Append the log entry to the "conversation_logs_experiment.txt" file
+  fs.appendFile("conversation_logs_experiment.txt", logEntry, (err) => {
     if (err) {
       console.error("Failed to log conversation:", err);
     }
   });
 }
+
+
 
 // Load environment variables from .env file
 dotenv.config();
@@ -157,6 +179,7 @@ app.post("/api/chat", async (req, res) => {
 
   // Initialize user session if it doesn't exist
   if (!userSessions[userId]) {
+    const group = "experiment"; 
     const introduction = await sendIntroductionMessage();
     userSessions[userId] = {
       conversationHistory: [
@@ -172,10 +195,12 @@ app.post("/api/chat", async (req, res) => {
       waitingForConfirmation: true, // Add this to track if we're waiting for the user's OK
       customerNumber: null, // Track the customer number state
       userName: "Ilia", // Default name, can be customized later
+      group: group, // Store the assigned group as experiment
+
     };
 
     // Log initial bot message
-    logConversation(userId, "assistant", introduction);
+    logConversation(userId, "assistant", introduction, group, true);
 
     // Send the initial introduction message
     return res.json({ reply: introduction, options: ["OK", "Understood"] });
@@ -183,7 +208,7 @@ app.post("/api/chat", async (req, res) => {
 
   const userSession = userSessions[userId];
   // Log user message
-  logConversation(userId, "user", userMessage);
+  logConversation(userId, "user", userMessage, userSession.group);
   userSession.conversationHistory.push({ role: "user", content: userMessage });
 
   // Handle initial confirmation
@@ -197,7 +222,7 @@ app.post("/api/chat", async (req, res) => {
     userSession.lastBotMessage = reply;
 
     // Log bot response
-    logConversation(userId, "assistant", reply);
+    logConversation(userId, "assistant", reply, userSession.group);
 
     return res.json({
       reply,
@@ -212,7 +237,7 @@ app.post("/api/chat", async (req, res) => {
       const reply = `Welcome, ${userSession.userName}! I'm ready to assist you with your orders. Which one would you like to manage?`;
 
       // Log the bot response
-      logConversation(userId, "assistant", reply);
+      logConversation(userId, "assistant", reply, userSession.group);
 
       return res.json({
         reply,
@@ -223,7 +248,7 @@ app.post("/api/chat", async (req, res) => {
       const reply = `It seems like the customer number you entered is incorrect. You can find your customer number in the confirmation E-Mail from your last purchase with us (Briefing Sheet).`;
 
       // Log the bot response
-      logConversation(userId, "assistant", reply);
+      logConversation(userId, "assistant", reply, userSession.group);
 
       return res.json({
         reply,
@@ -258,7 +283,7 @@ app.post("/api/chat", async (req, res) => {
       const reply = `Got it! You've selected Order ${selectedOrder.id}. How can I assist you with this order?`;
 
       // Log the bot response
-      logConversation(userId, "assistant", reply);
+      logConversation(userId, "assistant", reply, userSession.group);
 
       return res.json({
         reply,
@@ -275,7 +300,7 @@ app.post("/api/chat", async (req, res) => {
       const reply = "Please select an order to manage.";
 
       // Log the bot response
-      logConversation(userId, "assistant", reply);
+      logConversation(userId, "assistant", reply, userSession.group);
 
       return res.json({
         reply,
@@ -288,7 +313,7 @@ app.post("/api/chat", async (req, res) => {
     const reply = "Sure! Which order can I help you with?";
 
     // Log the bot response
-    logConversation(userId, "assistant", reply);
+    logConversation(userId, "assistant", reply, userSession.group);
 
     return res.json({
       reply,
@@ -343,7 +368,7 @@ app.post("/api/chat", async (req, res) => {
     userSession.conversationHistory.push({ role: "assistant", content: reply });
 
     // Log bot response
-    logConversation(userId, "assistant", reply);
+    logConversation(userId, "assistant", reply, userSession.group);
 
     // Cache the response
     responseCache[cacheKey] = reply;
