@@ -8,8 +8,15 @@ import fs from "fs"; // Import the filesystem module
 import { group } from "console";
 
 // Function to log conversation
-function logConversation(userId, role, message, group, sessionStart = false, sessionEnd = false) {
-  let logEntry = '';
+function logConversation(
+  userId,
+  role,
+  message,
+  group,
+  sessionStart = false,
+  sessionEnd = false
+) {
+  let logEntry = "";
 
   // Add session start marker if it's the beginning of a new session
   if (sessionStart) {
@@ -36,7 +43,13 @@ function logConversation(userId, role, message, group, sessionStart = false, ses
   });
 }
 
-
+function checkIfAllTasksCompleted(taskFlags) {
+  return (
+    taskFlags.trackOrderACompleted &&
+    taskFlags.modifyOrderBCompleted &&
+    taskFlags.returnOrderCCompleted
+  );
+}
 
 // Load environment variables from .env file
 dotenv.config();
@@ -114,7 +127,7 @@ You are a virtual assistant chatbot helping customers with their recent orders. 
    - Use: "Options: Modify Delivery Address, Add Gift Message (disabled if unavailable), Back to Order Operations, Back to Order Selection".
 
 3. **Cancel Operation:**
-   - If processing, confirm cancellation **by asking for the product number**.
+   - If processing, inform the user a cancellation *is* possible and ask them **if they are sure that they want to proceed with the cancellation**. Inform them that if they proceed, the order will not be delivered and a refund will be issued to the original payment method. They shall type "Confirm" to proceed.
    - If in-transit or delivered, inform the user it cannot be canceled and why.
    - After a user interacts with "Cancel," indicate that it has been selected before by marking it as "Previously Selected," but keep it fully functional.
    - Ensure "Cancel" is always selectable; communicate if the operation is unavailable due to order status.
@@ -179,7 +192,7 @@ app.post("/api/chat", async (req, res) => {
 
   // Initialize user session if it doesn't exist
   if (!userSessions[userId]) {
-    const group = "experiment"; 
+    const group = "experiment";
     const introduction = await sendIntroductionMessage();
     userSessions[userId] = {
       conversationHistory: [
@@ -196,7 +209,11 @@ app.post("/api/chat", async (req, res) => {
       customerNumber: null, // Track the customer number state
       userName: "Ilia", // Default name, can be customized later
       group: group, // Store the assigned group as experiment
-
+      taskFlags: {
+        trackOrderACompleted: false,
+        modifyOrderBCompleted: false,
+        returnOrderCCompleted: false,
+      },
     };
 
     // Log initial bot message
@@ -373,6 +390,68 @@ app.post("/api/chat", async (req, res) => {
     // Cache the response
     responseCache[cacheKey] = reply;
 
+    const regexA = /(?=.*currently in transit)(?=.*(expected|estimated))/i;
+    const regexB = /((?=.*updated|modified))(?=.*delivery address)/i;
+    const regexC = /(?=.*system error)(?=.*return label)(?=.*generating)/i;
+
+    // Detect user actions and update flags dynamically with keyword matching
+    if (regexA.test(reply) && currentOrderId === "A") {
+      userSession.taskFlags.trackOrderACompleted = true;
+      logConversation(
+        userId,
+        "system",
+        "Track Order A Completed",
+        userSession.group
+      );
+    } else if (regexB.test(reply) && currentOrderId === "B") {
+      userSession.taskFlags.modifyOrderBCompleted = true;
+      logConversation(
+        userId,
+        "system",
+        "Modify Order B Completed",
+        userSession.group
+      );
+    } else if (regexC.test(reply) && currentOrderId === "C") {
+      userSession.taskFlags.returnOrderCCompleted = true;
+      logConversation(
+        userId,
+        "system",
+        "Return Order C Completed",
+        userSession.group
+      );
+    }
+
+    // Log task flag status every time a response is sent
+    logConversation(
+      userId,
+      "system",
+      `Task Flags: ${JSON.stringify(userSession.taskFlags)}`,
+      userSession.group
+    );
+
+    // Check if all tasks are completed
+    // if (checkIfAllTasksCompleted(userSession.taskFlags)) {
+    //   const completedReply =
+    //     "You have completed all tasks. Would you like to proceed to the questionnaire or continue interacting with the chatbot?";
+    //   logConversation(userId, "assistant", completedReply, userSession.group);
+    //   // return res.json({
+    //   //   tasksCompleted: true, // New flag to indicate task completion
+    //   // });
+    // }
+
+    // Check if all tasks are completed
+    const allTasksCompleted = checkIfAllTasksCompleted(userSession.taskFlags);
+
+    // If all tasks are completed, log it
+    if (allTasksCompleted) {
+      logConversation(
+        userId,
+        "system",
+        "All tasks completed, prompt for questionnaire",
+        userSession.group
+      );
+    }
+
     // Extract options for button display
     let options = extractOptionsFromResponse(reply);
     options = cacheOptionsWithPreviouslySelected(
@@ -385,6 +464,7 @@ app.post("/api/chat", async (req, res) => {
       reply,
       options,
       showProgressBar: false, // No progress bar by default for AI-generated responses
+      tasksCompleted: allTasksCompleted, // Include the flag in the same response
     });
   } catch (error) {
     console.error(
