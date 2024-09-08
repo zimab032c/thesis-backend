@@ -151,7 +151,7 @@ To keep the conversation engaging and natural, **randomly choose** one of the fo
 - "Would you like to explore another option?"
 
 - If a user is disrespectful, you respond with a witty and sassy tone to keep the conversation light but assertive. Avoid being rude, but maintain a playful edge. Do not allow offensive language to go unaddressed.
-- Occasionally, when it feels appropriate and adds to the tone of the conversation, feel free to use emojis. However, keep the emojis rare and relevant to the content of your responses, ensuring they enhance rather than distract from the message. *Never* use them when listing the next options though!
+- Occasionally, when it feels appropriate and adds to the tone of the conversation, feel free to use emojis. However, use emojis *very* sparingly and only when relevant to the content of your responses, ensuring they enhance rather than distract from the message. *Never* use them when listing the next options though!
 
 
 Ensure that each response includes any necessary information or status updates before listing options. Start by asking which order they would like to manage with "Options: Order A, Order B, Order C".
@@ -188,7 +188,7 @@ let userSessions = {};
 
 app.post("/api/chat", async (req, res) => {
   const userMessage = req.body.message;
-  //unique identifier for each user session
+  //unique id for each user session
   const userId = req.body.userId || "default";
 
   if (!userSessions[userId]) {
@@ -336,17 +336,6 @@ app.post("/api/chat", async (req, res) => {
 
   // Handle "Track" operation
   const currentOrderId = userSession.selectedOrder.id;
-  // if (userMessage.includes("Track")) {
-  //   // Provide order tracking information
-  //   const order = userSession.selectedOrder;
-  //   const orderDetails = `Order ${order.id} (${order.product}) is currently ${order.status}.`;
-
-  //   return res.json({
-  //     reply: `Tracking information for ${orderDetails}`,
-  //     options: ["Modify", "Cancel", "Return", "Back to Order Selection"],
-  //     showProgressBar: true, // Show progress bar for tracking
-  //   });
-  // }
 
   // Track interactions for "Previously Selected"
   const currentOrderInteractions = userSession.interactions[currentOrderId];
@@ -482,16 +471,6 @@ app.post("/api/end-session", (req, res) => {
 
   const userSession = userSessions[userId];
   if (userSession) {
-    // Log the end of the session using the logConversation function
-    // Get the session start time
-    // logConversation(
-    //   userId,
-    //   "system",
-    //   "User has proceeded to the questionnaire.",
-    //   userSession.group,
-    //   false,
-    //   true
-    // );
     const sessionStartTime = new Date(userSession.sessionStartTime);
     const sessionEndTime = new Date();
     // Calculate the total time in milliseconds
