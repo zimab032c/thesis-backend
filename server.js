@@ -1,11 +1,9 @@
-// server.js
 import express from "express";
 import cors from "cors";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 
-import fs from "fs"; // Import the filesystem module
-import { group } from "console";
+import fs from "fs";
 
 // Function to log conversation
 function logConversation(
@@ -18,24 +16,22 @@ function logConversation(
 ) {
   let logEntry = "";
 
-  // Add session start marker if it's the beginning of a new session
+  // beginning of a new session
   if (sessionStart) {
     logEntry += `\n------------------------------\n`;
     logEntry += `Session Start: ${userId} (Group: ${group}) - ${new Date().toISOString()}\n`;
     logEntry += `------------------------------\n`;
   }
 
-  // Add the regular log entry
   logEntry += `${new Date().toISOString()} - ${userId} - ${group} - ${role}: ${message}\n`;
 
-  // Add session end marker if it's the end of the session
+  // end of the session
   if (sessionEnd) {
     logEntry += `\n------------------------------\n`;
     logEntry += `Session End: ${userId} - ${new Date().toISOString()}\n`;
     logEntry += `------------------------------\n`;
   }
 
-  // Append the log entry to the "conversation_logs_experiment.txt" file
   fs.appendFile("conversation_logs_experiment.txt", logEntry, (err) => {
     if (err) {
       console.error("Failed to log conversation:", err);
@@ -51,7 +47,6 @@ function checkIfAllTasksCompleted(taskFlags) {
   );
 }
 
-// Load environment variables from .env file
 dotenv.config();
 
 const app = express();
@@ -60,12 +55,12 @@ const port = 3000;
 app.use(cors());
 app.use(express.json());
 
-// Initialize OpenAI API Client
+// initialize OpenAI API Client
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // Use the API key from environment variables
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Define mock data for orders
+// mock data for orders
 const orders = [
   {
     id: "A",
@@ -82,12 +77,12 @@ const orders = [
   { id: "C", product: "Product Z", status: "Delivered", date: "2024-07-20" },
 ];
 
-// Cache to store consistent responses
+// cache to store consistent responses
 const responseCache = {};
 
-const currentDate = new Date().toDateString(); // e.g., "Wed Aug 25 2023"
+const currentDate = new Date().toDateString();
 
-// Generate the initial prompt
+// generate the initial prompt
 const generateInitialPrompt = () => `
 You are a virtual assistant chatbot helping customers with their recent orders. Start by introducing yourself and explaining your capabilities. Here's how you should begin the interaction:
 
@@ -95,11 +90,11 @@ You are a virtual assistant chatbot helping customers with their recent orders. 
 - Welcome! I’m your virtual assistant, here to help you with your recent orders. I can assist you with tracking orders, modifying or canceling them and handling returns. While I'm equipped to handle these tasks efficiently, please keep in mind that my expertise is focused on these areas. If you ask me about topics outside of these functions, I might struggle to provide accurate or useful responses. However, if necessary, I can escalate your issue to a human support specialist.
 - Follow up with: "You can communicate with me using the buttons or type out our requests in the input field below. Go ahead, try it."
 
-2. **Pause for User Confirmation:**
-   - Wait for a response from the user like "OK" or "Understood" before continuing.
-   - Once the user confirms, ask them to provide their customer number to proceed.
 
-**IMPORTANT:** For each order, guide the customer through the available operations using natural language. End the response with the options list. Use the format: "Options: Option1, Option2, Option3". Do not include "Options" elsewhere in the response.
+**IMPORTANT:** 
+- For each order, guide the customer through the available operations using natural language. End the response with the options list. Use the format: "Options: Option1, Option2, Option3". Do not include "Options" elsewhere in the response.
+- Refrain from using bullet points or list formatting in your responses. Present all information in continuous prose or paragraphs.  
+- Avoid using conversational filler phrases such as 'hold on' or 'please wait.' Instead, directly provide the outcome of the action without simulating procedural responses.
 
 **Operation Guidelines:**
 
@@ -119,7 +114,7 @@ You are a virtual assistant chatbot helping customers with their recent orders. 
 2. **Modify Operation:**
    - Transition to a new state when "Modify" is selected and always provide the modification options available for the order.
    - **Order A (In transit):** Allow "Modify Delivery Address". Display "Add Gift Message" as disabled and explain why it's unavailable.
-   - **Order B (Processing):** Offer both "Modify Delivery Address" and "Add Gift Message".
+   - **Order B (Processing):** Allow *both* modification options "Modify Delivery Address" and "Add Gift Message" for orders in processing!
    - **Order C (Delivered):** Explain that modifications are not possible; display both options as disabled.
    - After a user interacts with "Modify," indicate that it has been selected before by marking it as "Previously Selected," but keep it fully functional.
    - Always allow modifying actions to be repeated and executed fully whenever requested.
@@ -162,12 +157,13 @@ Ensure that each response includes any necessary information or status updates b
 async function sendIntroductionMessage() {
   const introductionMessage = [
     { role: "system", content: generateInitialPrompt() },
-    { role: "user", content: "Start" }, // Triggering message for the introduction
+    // triggering message for the introduction
+    { role: "user", content: "Start" },
   ];
 
   try {
     const chatCompletion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: introductionMessage,
       max_tokens: 200,
       temperature: 0.0,
@@ -188,9 +184,9 @@ let userSessions = {};
 
 app.post("/api/chat", async (req, res) => {
   const userMessage = req.body.message;
-  const userId = req.body.userId || "default"; // Use a unique identifier for each user session
+  //unique identifier for each user session
+  const userId = req.body.userId || "default";
 
-  // Initialize user session if it doesn't exist
   if (!userSessions[userId]) {
     const group = "experiment";
     const introduction = await sendIntroductionMessage();
@@ -205,53 +201,47 @@ app.post("/api/chat", async (req, res) => {
         C: [],
       },
       selectedOrder: null,
-      waitingForConfirmation: true, // Add this to track if we're waiting for the user's OK
-      customerNumber: null, // Track the customer number state
-      userName: "Ilia", // Default name, can be customized later
-      group: group, // Store the assigned group as experiment
+      waitingForConfirmation: true,
+      customerNumber: null,
+      userName: "Ilia",
+      group: group,
       taskFlags: {
         trackOrderACompleted: false,
         modifyOrderBCompleted: false,
         returnOrderCCompleted: false,
       },
-      sessionStartTime: new Date(), // Store the session start time
+      sessionStartTime: new Date(),
     };
 
-    // Log initial bot message
+    // log initial bot message
     logConversation(userId, "assistant", introduction, group, true);
 
-    // Send the initial introduction message
-    return res.json({ reply: introduction, options: ["OK", "Understood"] });
+    return res.json({ reply: introduction, options: ["Understood"] });
   }
 
   const userSession = userSessions[userId];
-  // Log user message
   logConversation(userId, "user", userMessage, userSession.group);
   userSession.conversationHistory.push({ role: "user", content: userMessage });
 
-  // Handle initial confirmation
   if (userSession.waitingForConfirmation) {
-    // After user confirms understanding, ask for customer number
     userSession.waitingForConfirmation = false;
     const reply =
       "Thanks for confirming! Whenever you’re ready, please provide your customer number to proceed.";
 
-    // Store this message as the latest relevant bot message
     userSession.lastBotMessage = reply;
 
-    // Log bot response
     logConversation(userId, "assistant", reply, userSession.group);
 
     return res.json({
       reply,
-      showProgressBar: false, // No progress bar needed for this response
+      showProgressBar: false,
     });
   }
 
   // Handle customer number input
   if (!userSession.customerNumber) {
     if (/123-456/.test(userMessage)) {
-      userSession.customerNumber = userMessage; // Accept the correct customer number
+      userSession.customerNumber = userMessage;
       const reply = `Welcome, ${userSession.userName}! I'm ready to assist you with your orders. Which one would you like to manage?`;
 
       // Log the bot response
@@ -260,7 +250,7 @@ app.post("/api/chat", async (req, res) => {
       return res.json({
         reply,
         options: ["Order A", "Order B", "Order C"],
-        showProgressBar: true, // Show progress bar for this interaction
+        showProgressBar: true,
       });
     } else {
       const reply = `It seems like the customer number you entered is incorrect. You can find your customer number in the confirmation E-Mail from your last purchase with us (Briefing Sheet).`;
@@ -271,7 +261,7 @@ app.post("/api/chat", async (req, res) => {
       return res.json({
         reply,
         options: [],
-        showProgressBar: true, // No progress bar for this interaction
+        showProgressBar: true,
       });
     }
   }
@@ -376,10 +366,10 @@ app.post("/api/chat", async (req, res) => {
 
   try {
     const chatCompletion = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // or "gpt-4" if you have access
+      model: "gpt-4o-mini",
       messages: userSession.conversationHistory,
       max_tokens: 150,
-      temperature: 0.5, // Lower temperature for deterministic output
+      temperature: 0.5,
     });
 
     const reply = chatCompletion.choices[0].message.content;
@@ -464,8 +454,8 @@ app.post("/api/chat", async (req, res) => {
     res.json({
       reply,
       options,
-      showProgressBar: false, // No progress bar by default for AI-generated responses
-      tasksCompleted: allTasksCompleted, // Include the flag in the same response
+      showProgressBar: false,
+      tasksCompleted: allTasksCompleted,
     });
   } catch (error) {
     console.error(
@@ -498,7 +488,7 @@ app.post("/api/end-session", (req, res) => {
     //   true
     // );
     const sessionStartTime = new Date(userSession.sessionStartTime);
-    const sessionEndTime = new Date(); // Current time as session end time
+    const sessionEndTime = new Date();
     // Calculate the total time in milliseconds
     const timeTaken = sessionEndTime - sessionStartTime;
 
@@ -537,7 +527,7 @@ function extractOptionsFromResponse(reply) {
     return match[1]
       .split(",")
       .map((option) => option.trim()) // Trim whitespace
-      .map((option) => option.replace(/[,.]$/, "")); // Remove trailing comma or period
+      .map((option) => option.replace(/[,.]$/, ""));
   }
   return [];
 }
