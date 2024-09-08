@@ -214,6 +214,7 @@ app.post("/api/chat", async (req, res) => {
         modifyOrderBCompleted: false,
         returnOrderCCompleted: false,
       },
+      sessionStartTime: new Date(), // Store the session start time
     };
 
     // Log initial bot message
@@ -472,6 +473,55 @@ app.post("/api/chat", async (req, res) => {
       error.response ? error.response.data : error.message
     );
     res.status(500).send("Error processing the request");
+  }
+});
+
+app.post("/api/end-session", (req, res) => {
+  const { userId, sessionEnd } = req.body;
+
+  if (!userId || sessionEnd !== true) {
+    return res
+      .status(400)
+      .send("Invalid request: missing userId or sessionEnd flag.");
+  }
+
+  const userSession = userSessions[userId];
+  if (userSession) {
+    // Log the end of the session using the logConversation function
+    // Get the session start time
+    // logConversation(
+    //   userId,
+    //   "system",
+    //   "User has proceeded to the questionnaire.",
+    //   userSession.group,
+    //   false,
+    //   true
+    // );
+    const sessionStartTime = new Date(userSession.sessionStartTime);
+    const sessionEndTime = new Date(); // Current time as session end time
+    // Calculate the total time in milliseconds
+    const timeTaken = sessionEndTime - sessionStartTime;
+
+    // Convert milliseconds to a readable format (minutes and seconds)
+    const totalMinutes = Math.floor(timeTaken / 60000);
+    const totalSeconds = ((timeTaken % 60000) / 1000).toFixed(0);
+
+    // Log the total time taken to complete the tasks
+    const timeMessage = `\n===== SESSION COMPLETED =====\nUser proceeded to the questionnaire.\nTotal time to complete tasks: ${totalMinutes} minutes and ${totalSeconds} seconds\n=============================\n`;
+
+    // Log the session end and the total time taken
+    logConversation(
+      userId,
+      "system",
+      timeMessage,
+      userSession.group,
+      false,
+      true
+    );
+
+    res.status(200).send("Session end logged.");
+  } else {
+    res.status(404).send("User session not found.");
   }
 });
 
