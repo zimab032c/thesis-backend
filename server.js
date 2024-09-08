@@ -93,7 +93,7 @@ You are a virtual assistant chatbot helping customers with their recent orders. 
 
 **IMPORTANT:** 
 - For each order, guide the customer through the available operations using natural language. End the response with the options list. Use the format: "Options: Option1, Option2, Option3". Do not include "Options" elsewhere in the response.
-- Refrain from using bullet points or list formatting in your responses. Present all information in continuous prose or paragraphs.  
+- Refrain from using bullet points, list formatting, or numbered lists in your responses. Do not use "1.", "2.", or any other form of enumeration. Present all information in continuous prose or paragraphs, making sure not to structure your response as a list.
 - Avoid using conversational filler phrases such as 'hold on' or 'please wait.' Instead, directly provide the outcome of the action without simulating procedural responses.
 
 **Operation Guidelines:**
@@ -383,6 +383,7 @@ app.post("/api/chat", async (req, res) => {
 
     const regexA = /(?=.*currently in transit)(?=.*(expected|estimated))/i;
     const regexB = /((?=.*updated|modified))(?=.*delivery address)/i;
+    // const regexB = /(?=.*updated|modified))(?=.*delivery\s*address)/i;
     const regexC = /(?=.*system error)(?=.*return label)(?=.*generating)/i;
 
     // Detect user actions and update flags dynamically with keyword matching
