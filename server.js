@@ -486,6 +486,7 @@ app.post("/api/chat", async (req, res) => {
 // API Endpoint to Serve Log File
 app.get("/api/logs", (req, res) => {
   const logFilePath = path.join(__dirname, "conversation_logs_experiment.txt");
+  console.log(`Log file path: ${logFilePath}`);
 
   fs.readFile(logFilePath, "utf8", (err, data) => {
     if (err) {
