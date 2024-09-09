@@ -5,6 +5,11 @@ import dotenv from "dotenv";
 
 import fs from "fs";
 import path from "path"; // For file path handling
+import { fileURLToPath } from "url";
+
+// Define __dirname for ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // log convo details to conversation_logs_experiment.txt
 function logConversation(
@@ -486,7 +491,6 @@ app.post("/api/chat", async (req, res) => {
 // API Endpoint to Serve Log File
 app.get("/api/logs", (req, res) => {
   const logFilePath = path.join(__dirname, "conversation_logs_experiment.txt");
-  console.log(`Log file path: ${logFilePath}`);
 
   fs.readFile(logFilePath, "utf8", (err, data) => {
     if (err) {
