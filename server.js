@@ -4,10 +4,9 @@ import OpenAI from "openai";
 import dotenv from "dotenv";
 
 import fs from "fs";
-import path from "path"; // For file path handling
+import path from "path";
 import { fileURLToPath } from "url";
 
-// Define __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -178,7 +177,7 @@ async function sendIntroductionMessage() {
 
   try {
     const chatCompletion = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       messages: introductionMessage,
       max_tokens: 200,
       temperature: 0.0, //deterministic
@@ -348,16 +347,16 @@ app.post("/api/chat", async (req, res) => {
     });
   }
 
-  // Handle "Track" operation
+  // handle "Track" operation
   const currentOrderId = userSession.selectedOrder.id;
 
-  // Track interactions for "Previously Selected"
+  // track interactions for "Previously Selected"
   const currentOrderInteractions = userSession.interactions[currentOrderId];
   if (!currentOrderInteractions.includes(userMessage)) {
     currentOrderInteractions.push(userMessage);
   }
 
-  // Check if the response for this exact conversation state is cached
+  // check if the response for this exact conversation state is cached
   const cacheKey = JSON.stringify(userSession.conversationHistory);
   if (responseCache[cacheKey]) {
     console.log(`Using cached response for ${userId}`);
@@ -373,7 +372,7 @@ app.post("/api/chat", async (req, res) => {
 
   try {
     const chatCompletion = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       messages: userSession.conversationHistory,
       max_tokens: 200,
       temperature: 0.5, //some flexibility for the main interactions
@@ -388,7 +387,8 @@ app.post("/api/chat", async (req, res) => {
     // cache the response
     responseCache[cacheKey] = reply;
 
-    const regexA = /(?=.*currently in transit)(?=.*(expected|estimated))/i;
+    const regexA =
+      /(?=.*currently in transit)(?=.*(expected|estimated|should arrive))/i;
     const regexB = /((?=.*updated|modified))(?=.*delivery address)/i;
     // const regexB = /(?=.*updated|modified))(?=.*delivery\s*address)/i;
     const regexC = /(?=.*system error)(?=.*return label)(?=.*generating)/i;
@@ -488,7 +488,6 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// API Endpoint to Serve Log File
 app.get("/api/logs", (req, res) => {
   const logFilePath = path.join(__dirname, "conversation_logs_experiment.txt");
 
