@@ -40,27 +40,6 @@ function logConversation(
   });
 }
 
-// API Endpoint to Serve Log File
-app.get("/api/logs", (req, res) => {
-  const logFilePath = path.join(__dirname, "conversation_logs_experiment.txt");
-
-  fs.readFile(logFilePath, "utf8", (err, data) => {
-    if (err) {
-      console.error("Error reading log file:", err);
-      return res.status(500).json({ message: "Error reading log file" });
-    }
-    res.type("text/plain").send(data);
-  });
-});
-
-function checkIfAllTasksCompleted(taskFlags) {
-  return (
-    taskFlags.trackOrderACompleted &&
-    taskFlags.modifyOrderBCompleted &&
-    taskFlags.returnOrderCCompleted
-  );
-}
-
 dotenv.config();
 
 const app = express();
@@ -503,6 +482,27 @@ app.post("/api/chat", async (req, res) => {
     res.status(500).send("Error processing the request");
   }
 });
+
+// API Endpoint to Serve Log File
+app.get("/api/logs", (req, res) => {
+  const logFilePath = path.join(__dirname, "conversation_logs_experiment.txt");
+
+  fs.readFile(logFilePath, "utf8", (err, data) => {
+    if (err) {
+      console.error("Error reading log file:", err);
+      return res.status(500).json({ message: "Error reading log file" });
+    }
+    res.type("text/plain").send(data);
+  });
+});
+
+function checkIfAllTasksCompleted(taskFlags) {
+  return (
+    taskFlags.trackOrderACompleted &&
+    taskFlags.modifyOrderBCompleted &&
+    taskFlags.returnOrderCCompleted
+  );
+}
 
 app.post("/api/end-session", (req, res) => {
   const { userId, sessionEnd } = req.body;
