@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import dotenv from "dotenv";
 
 import fs from "fs";
+import path from "path"; // For file path handling
 
 // log convo details to conversation_logs_experiment.txt
 function logConversation(
@@ -38,6 +39,19 @@ function logConversation(
     }
   });
 }
+
+// API Endpoint to Serve Log File
+app.get("/api/logs", (req, res) => {
+  const logFilePath = path.join(__dirname, "conversation_logs_experiment.txt");
+
+  fs.readFile(logFilePath, "utf8", (err, data) => {
+    if (err) {
+      console.error("Error reading log file:", err);
+      return res.status(500).json({ message: "Error reading log file" });
+    }
+    res.type("text/plain").send(data);
+  });
+});
 
 function checkIfAllTasksCompleted(taskFlags) {
   return (
