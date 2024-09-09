@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 
 import fs from "fs";
 
-// Function to log conversation
+// log convo details to conversation_logs_experiment.txt
 function logConversation(
   userId,
   role,
@@ -95,14 +95,20 @@ You are a virtual assistant chatbot helping customers with their recent orders. 
 - For each order, guide the customer through the available operations using natural language. End the response with the options list. Use the format: "Options: Option1, Option2, Option3". Do not include "Options" elsewhere in the response.
 - Refrain from using bullet points, list formatting, or numbered lists in your responses. Do not use "1.", "2.", or any other form of enumeration. Present all information in continuous prose or paragraphs, making sure not to structure your response as a list.
 - Avoid using conversational filler phrases such as 'hold on' or 'please wait.' Instead, directly provide the outcome of the action without simulating procedural responses.
+- Always provide responses that are warm, personable, and conversational, regardless of how short or direct the user's input is. Respond in a lively and friendly way even when user inputs are brief (e.g., "Track", "Modify", "Cancel"). Acknowledge their request, elaborate on it, and engage with warmth, even in simple interactions.
+- Even if the input is simplistic, don’t treat it as a robotic command. Always add personality and warmth to the response by acknowledging the action and providing additional conversational context.
+- Use empathetic and friendly tones in every interaction. When users encounter limitations, such as certain operations being unavailble for certain orders, acknowledge their potential frustration and offer reassurance.
+- Whenever a task is completed, celebrate it lightly with phrases like "Done!" or "Great, that’s all set!" but avoid being overly casual or informal.
+- When reporting on completed tasks (e.g., tracking, modifying, or canceling orders), always use the **past tense** to indicate the task has been accomplished.
+
 
 **Operation Guidelines:**
 
 1. **Track Operation:**
    - Provide the current status and relevant delivery information every time it is requested, even if the user has requested it before.
    - Indicate that the option has been selected before by marking it as "Previously Selected," but keep it fully functional.
-   - For context: Today is 30.08.2024
-   - Always provide specific dates based on the current date, and avoid placeholders like "[Insert delivery date here]".
+   - For context: Today is 9.9.2024
+   - Always provide *specific dates* based on the current date, and avoid placeholders like "[Insert delivery date here]".
    - Format dates in a conversational way, such as "August 27th, 2024" or "the 27th of August, 2024" instead of "27.08.2024".
    - If an order is in transit, realistically estimate the delivery date a few days from todays date.
    - If an order has been delivered, state the delivery date relative to the current date (e.g., "Delivered 3 days ago on [date]").
@@ -113,9 +119,16 @@ You are a virtual assistant chatbot helping customers with their recent orders. 
 
 2. **Modify Operation:**
    - Transition to a new state when "Modify" is selected and always provide the modification options available for the order.
+   - If the user tries to modify their order details, always ask them to provide the new order details. Don't just immediatly confirm that the details have been updated, without the user providing them first!
    - **Order A (In transit):** Allow "Modify Delivery Address". Display "Add Gift Message" as disabled and explain why it's unavailable.
    - **Order B (Processing):** Allow *both* modification options "Modify Delivery Address" and "Add Gift Message" for orders in processing!
    - **Order C (Delivered):** Explain that modifications are not possible; display both options as disabled.
+   - When modifying the delivery address, accept all addresses that follow this format: "Street Name House Number, Postal Code City" or a close variation.
+   - Use this regular expression to determine if an address is valid: /\b[A-Za-zßäöüÄÖÜ]+\s+\d+[a-zA-Z]?\s*,?\s*\d+\s+?[A-Za-zßäöüÄÖÜ]+\b/i.
+   - If the address follows this format but looks unconventional (e.g., missing a comma or including non-standard characters), **do not** ask the user to re-enter the address. Accept it as valid.
+   - Only inform the user that their address is incorrect if it does not follow the regex pattern.
+   - For invalid addresses, suggest the correct format: "Street Name House Number, Postal Code City". Example: "Musterstraße 123, 12345 Berlin".
+   - If an action is unavailable, acknowledge this with an empathetic tone. Apologize and offer an explanation. 
    - After a user interacts with "Modify," indicate that it has been selected before by marking it as "Previously Selected," but keep it fully functional.
    - Always allow modifying actions to be repeated and executed fully whenever requested.
    - Avoid redundant process announcements like "I will now update..." as the visual pill messages already convey these actions.
@@ -158,10 +171,10 @@ Ensure that each response includes any necessary information or status updates b
 
 `;
 
+// triggering introduction message
 async function sendIntroductionMessage() {
   const introductionMessage = [
     { role: "system", content: generateInitialPrompt() },
-    // triggering message for the introduction
     { role: "user", content: "Start" },
   ];
 
@@ -170,7 +183,7 @@ async function sendIntroductionMessage() {
       model: "gpt-4o",
       messages: introductionMessage,
       max_tokens: 200,
-      temperature: 0.0,
+      temperature: 0.0, //deterministic
     });
 
     const reply = chatCompletion.choices[0].message.content;
@@ -180,7 +193,7 @@ async function sendIntroductionMessage() {
       "Error generating introduction:",
       error.response ? error.response.data : error.message
     );
-    return "Sorry, there was an error generating the introduction message.";
+    return "It seems we are encountering some connectivity issues. Please try again in a few minutes.";
   }
 }
 
@@ -191,6 +204,7 @@ app.post("/api/chat", async (req, res) => {
   //unique id for each user session
   const userId = req.body.userId || "default";
 
+  //starting user session
   if (!userSessions[userId]) {
     const group = "experiment";
     const introduction = await sendIntroductionMessage();
@@ -207,6 +221,7 @@ app.post("/api/chat", async (req, res) => {
       selectedOrder: null,
       waitingForConfirmation: true,
       customerNumber: null,
+      //IMPORTANT, change later!!
       userName: "Ilia",
       group: group,
       taskFlags: {
@@ -223,6 +238,7 @@ app.post("/api/chat", async (req, res) => {
     return res.json({ reply: introduction, options: ["Understood"] });
   }
 
+  // initial scripted interactions
   const userSession = userSessions[userId];
   logConversation(userId, "user", userMessage, userSession.group);
   userSession.conversationHistory.push({ role: "user", content: userMessage });
@@ -242,13 +258,13 @@ app.post("/api/chat", async (req, res) => {
     });
   }
 
-  // Handle customer number input
+  // handle customer number input
   if (!userSession.customerNumber) {
     if (/123-456/.test(userMessage)) {
       userSession.customerNumber = userMessage;
       const reply = `Welcome, ${userSession.userName}! I'm ready to assist you with your orders. Which one would you like to manage?`;
 
-      // Log the bot response
+      // log the bot response
       logConversation(userId, "assistant", reply, userSession.group);
 
       return res.json({
@@ -257,9 +273,9 @@ app.post("/api/chat", async (req, res) => {
         showProgressBar: true,
       });
     } else {
-      const reply = `It seems like the customer number you entered is incorrect. You can find your customer number in the confirmation E-Mail from your last purchase with us (Briefing Sheet).`;
+      const reply = `It seems like the customer number you entered is incorrect. You can find your customer number in the confirmation E-Mail from your last purchase with us (Button with ? icon).`;
 
-      // Log the bot response
+      // log the bot response
       logConversation(userId, "assistant", reply, userSession.group);
 
       return res.json({
@@ -270,11 +286,11 @@ app.post("/api/chat", async (req, res) => {
     }
   }
 
-  // Handle order selection and navigation
+  // handle order selection and navigation
   if (!userSession.selectedOrder) {
     const normalizedUserMessage = userMessage.toLowerCase().trim();
 
-    // Define regex patterns for each order
+    // regex patterns for each order
     const orderPatterns = orders.map((order) => {
       return {
         id: order.id,
@@ -285,7 +301,7 @@ app.post("/api/chat", async (req, res) => {
       };
     });
 
-    // Find the order that matches the user's input
+    // finding order that matches the user input
     const selectedOrder = orderPatterns.find((order) =>
       order.regex.test(normalizedUserMessage)
     );
@@ -294,7 +310,7 @@ app.post("/api/chat", async (req, res) => {
       userSession.selectedOrder = selectedOrder;
       const reply = `Got it! You've selected Order ${selectedOrder.id}. How can I assist you with this order?`;
 
-      // Log the bot response
+      // log the bot response
       logConversation(userId, "assistant", reply, userSession.group);
 
       return res.json({
@@ -311,7 +327,7 @@ app.post("/api/chat", async (req, res) => {
     } else {
       const reply = "Please select an order to manage.";
 
-      // Log the bot response
+      // log the bot response
       logConversation(userId, "assistant", reply, userSession.group);
 
       return res.json({
@@ -324,7 +340,7 @@ app.post("/api/chat", async (req, res) => {
     userSession.selectedOrder = null;
     const reply = "Sure! Which order can I help you with?";
 
-    // Log the bot response
+    // log the bot response
     logConversation(userId, "assistant", reply, userSession.group);
 
     return res.json({
@@ -359,19 +375,19 @@ app.post("/api/chat", async (req, res) => {
 
   try {
     const chatCompletion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: userSession.conversationHistory,
-      max_tokens: 150,
-      temperature: 0.5,
+      max_tokens: 200,
+      temperature: 0.5, //some flexibility for the main interactions
     });
 
     const reply = chatCompletion.choices[0].message.content;
     userSession.conversationHistory.push({ role: "assistant", content: reply });
 
-    // Log bot response
+    // log bot response
     logConversation(userId, "assistant", reply, userSession.group);
 
-    // Cache the response
+    // cache the response
     responseCache[cacheKey] = reply;
 
     const regexA = /(?=.*currently in transit)(?=.*(expected|estimated))/i;
@@ -379,34 +395,58 @@ app.post("/api/chat", async (req, res) => {
     // const regexB = /(?=.*updated|modified))(?=.*delivery\s*address)/i;
     const regexC = /(?=.*system error)(?=.*return label)(?=.*generating)/i;
 
-    // Detect user actions and update flags dynamically with keyword matching
-    if (regexA.test(reply) && currentOrderId === "A") {
-      userSession.taskFlags.trackOrderACompleted = true;
-      logConversation(
-        userId,
-        "system",
-        "Track Order A Completed",
-        userSession.group
-      );
-    } else if (regexB.test(reply) && currentOrderId === "B") {
-      userSession.taskFlags.modifyOrderBCompleted = true;
-      logConversation(
-        userId,
-        "system",
-        "Modify Order B Completed",
-        userSession.group
-      );
-    } else if (regexC.test(reply) && currentOrderId === "C") {
-      userSession.taskFlags.returnOrderCCompleted = true;
-      logConversation(
-        userId,
-        "system",
-        "Return Order C Completed",
-        userSession.group
-      );
+    // tracking the 3 tasks the user is supposed to complete
+    const taskCompletion = {
+      A: {
+        regex: regexA,
+        flag: "trackOrderACompleted",
+        message: "Track Order A Completed",
+      },
+      B: {
+        regex: regexB,
+        flag: "modifyOrderBCompleted",
+        message: "Modify Order B Completed",
+      },
+      C: {
+        regex: regexC,
+        flag: "returnOrderCCompleted",
+        message: "Return Order C Completed",
+      },
+    };
+
+    const task = taskCompletion[currentOrderId];
+    if (task && task.regex.test(reply)) {
+      userSession.taskFlags[task.flag] = true;
+      logConversation(userId, "system", task.message, userSession.group);
     }
 
-    // Log task flag status every time a response is sent
+    // if (regexA.test(reply) && currentOrderId === "A") {
+    //   userSession.taskFlags.trackOrderACompleted = true;
+    //   logConversation(
+    //     userId,
+    //     "system",
+    //     "Track Order A Completed",
+    //     userSession.group
+    //   );
+    // } else if (regexB.test(reply) && currentOrderId === "B") {
+    //   userSession.taskFlags.modifyOrderBCompleted = true;
+    //   logConversation(
+    //     userId,
+    //     "system",
+    //     "Modify Order B Completed",
+    //     userSession.group
+    //   );
+    // } else if (regexC.test(reply) && currentOrderId === "C") {
+    //   userSession.taskFlags.returnOrderCCompleted = true;
+    //   logConversation(
+    //     userId,
+    //     "system",
+    //     "Return Order C Completed",
+    //     userSession.group
+    //   );
+    // }
+
+    // log task flag status every time a response is sent
     logConversation(
       userId,
       "system",
@@ -414,20 +454,10 @@ app.post("/api/chat", async (req, res) => {
       userSession.group
     );
 
-    // Check if all tasks are completed
-    // if (checkIfAllTasksCompleted(userSession.taskFlags)) {
-    //   const completedReply =
-    //     "You have completed all tasks. Would you like to proceed to the questionnaire or continue interacting with the chatbot?";
-    //   logConversation(userId, "assistant", completedReply, userSession.group);
-    //   // return res.json({
-    //   //   tasksCompleted: true, // New flag to indicate task completion
-    //   // });
-    // }
-
-    // Check if all tasks are completed
+    // check if all tasks are completed
     const allTasksCompleted = checkIfAllTasksCompleted(userSession.taskFlags);
 
-    // If all tasks are completed, log it
+    // if all tasks are completed, log it
     if (allTasksCompleted) {
       logConversation(
         userId,
@@ -437,7 +467,7 @@ app.post("/api/chat", async (req, res) => {
       );
     }
 
-    // Extract options for button display
+    // extract options for button display
     let options = extractOptionsFromResponse(reply);
     options = cacheOptionsWithPreviouslySelected(
       options,
@@ -453,7 +483,7 @@ app.post("/api/chat", async (req, res) => {
     });
   } catch (error) {
     console.error(
-      "Error:",
+      "Error while extracting options:",
       error.response ? error.response.data : error.message
     );
     res.status(500).send("Error processing the request");
@@ -473,17 +503,16 @@ app.post("/api/end-session", (req, res) => {
   if (userSession) {
     const sessionStartTime = new Date(userSession.sessionStartTime);
     const sessionEndTime = new Date();
-    // Calculate the total time in milliseconds
+    // calculate total time in milliseconds
     const timeTaken = sessionEndTime - sessionStartTime;
 
-    // Convert milliseconds to a readable format (minutes and seconds)
+    // calculate minutes and seconds
     const totalMinutes = Math.floor(timeTaken / 60000);
     const totalSeconds = ((timeTaken % 60000) / 1000).toFixed(0);
 
-    // Log the total time taken to complete the tasks
     const timeMessage = `\n===== SESSION COMPLETED =====\nUser proceeded to the questionnaire.\nTotal time to complete tasks: ${totalMinutes} minutes and ${totalSeconds} seconds\n=============================\n`;
 
-    // Log the session end and the total time taken
+    // log completion time
     logConversation(
       userId,
       "system",
@@ -493,7 +522,7 @@ app.post("/api/end-session", (req, res) => {
       true
     );
 
-    res.status(200).send("Session end logged.");
+    res.status(200).send("Session End logged.");
   } else {
     res.status(404).send("User session not found.");
   }
@@ -503,20 +532,19 @@ app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
 
-// Function to extract options from the AI response
+// function to extract options from the AI response
 function extractOptionsFromResponse(reply) {
   const match = reply.match(/Options:\s*([^\n\r]+)/i);
   if (match) {
-    // Split the matched options by comma, trim each option, and remove unwanted punctuation
     return match[1]
       .split(",")
-      .map((option) => option.trim()) // Trim whitespace
+      .map((option) => option.trim())
       .map((option) => option.replace(/[,.]$/, ""));
   }
   return [];
 }
 
-// Function to mark options as "Previously Selected" based on past interactions
+// function to mark options as "Previously Selected" based on past interactions (feature wasn't developed further)
 function cacheOptionsWithPreviouslySelected(options, interactions) {
   const nonGrayedOptions = [
     "Order A",
